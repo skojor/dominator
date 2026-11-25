@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 
+#include "dishcliclient.h"
 #include "dishdirectionindicator.h"
 #include "dishsettings.h"
 #include "dishsettingsdialog.h"
@@ -15,6 +16,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QMenu>
 #include <QMenuBar>
 #include <QPushButton>
@@ -29,6 +31,7 @@ MainWindow::MainWindow(QWidget *parent)
     positionReporter_ = new PositionReporter(ipcServer_, this);
     scanController_ = new ScanController(this);
     dishSettings_ = new DishSettings(this);
+    dishCliClient_ = new DishCliClient(this);
 
     setWindowTitle(tr("Dominator - Satellite Dish Control"));
     resize(760, 650);
@@ -47,6 +50,8 @@ MainWindow::MainWindow(QWidget *parent)
     auto *connectionLayout = new QHBoxLayout(connectionGroup);
     auto *addressInput = new QLineEdit(connectionGroup);
     addressInput->setPlaceholderText(tr("Dish IP address"));
+    addressInput->setToolTip(
+        tr("The dish CLI uses unencrypted Telnet. Connect only on a trusted network."));
     auto *connectButton = new QPushButton(tr("Connect"), connectionGroup);
     auto *disconnectButton = new QPushButton(tr("Disconnect"), connectionGroup);
     disconnectButton->setEnabled(false);
@@ -109,10 +114,12 @@ MainWindow::MainWindow(QWidget *parent)
     auto *readoutsLayout = new QFormLayout(readoutsGroup);
     scanStateLabel_ = new QLabel(tr("Stopped"), readoutsGroup);
     ipcStatusLabel_ = new QLabel(readoutsGroup);
+    dishCliStatusLabel_ = new QLabel(dishCliClient_->stateText(), readoutsGroup);
     azimuthLabel_ = new QLabel(tr("— °"), readoutsGroup);
     elevationLabel_ = new QLabel(tr("— °"), readoutsGroup);
     signalLevelLabel_ = new QLabel(tr("—"), readoutsGroup);
     readoutsLayout->addRow(tr("Scan state:"), scanStateLabel_);
+    readoutsLayout->addRow(tr("Dish CLI:"), dishCliStatusLabel_);
     readoutsLayout->addRow(tr("Hauken IPC:"), ipcStatusLabel_);
     readoutsLayout->addRow(tr("Current azimuth:"), azimuthLabel_);
     readoutsLayout->addRow(tr("Current elevation:"), elevationLabel_);
@@ -128,6 +135,33 @@ MainWindow::MainWindow(QWidget *parent)
             scanController_, &ScanController::startScan);
     connect(stopScanButton, &QPushButton::clicked,
             scanController_, &ScanController::stopScan);
+    connect(connectButton, &QPushButton::clicked, this, [this, addressInput] {
+        QString password;
+        QString error;
+        if (!dishSettings_->loadPassword(password, error)) {
+            QMessageBox::warning(this, tr("Dish password unavailable"), error);
+            return;
+        }
+
+        dishCliClient_->connectToDish(addressInput->text(),
+                                      static_cast<quint16>(dishSettings_->tcpPort()),
+                                      dishSettings_->username(), password);
+        password.fill(QChar(0));
+    });
+    connect(disconnectButton, &QPushButton::clicked,
+            dishCliClient_, &DishCliClient::disconnectFromDish);
+    connect(dishCliClient_, &DishCliClient::stateChanged, this,
+            [this, connectButton, disconnectButton](DishCliClient::State state,
+                                                     const QString &description) {
+        dishCliStatusLabel_->setText(description);
+        const bool disconnected = state == DishCliClient::State::Disconnected;
+        connectButton->setEnabled(disconnected);
+        disconnectButton->setEnabled(!disconnected);
+    });
+    connect(dishCliClient_, &DishCliClient::errorOccurred, this,
+            [this](const QString &error) {
+        statusBar()->showMessage(error, 12000);
+    });
     connect(ipcServer_, &LocalIpcServer::statusChanged,
             ipcStatusLabel_, &QLabel::setText);
     ipcStatusLabel_->setText(ipcServer_->statusText());

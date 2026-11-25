@@ -9,6 +9,8 @@ qt_add_executable(Dominator
     WIN32 MACOSX_BUNDLE
     main.cpp
     resources/icons.qrc
+    dishcliclient.cpp
+    dishcliclient.h
     mainwindow.cpp
     mainwindow.h
     dishdirectionindicator.cpp
@@ -129,4 +131,24 @@ if(BUILD_TESTING)
     set_tests_properties(DishDirectionIndicatorTests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+
+    qt_add_executable(DishCliClientTests
+        tests/dishcliclient_test.cpp
+        dishcliclient.cpp
+        dishcliclient.h
+    )
+
+    target_include_directories(DishCliClientTests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    target_link_libraries(DishCliClientTests
+        PRIVATE
+            Qt::Core
+            Qt::Network
+            Qt::Test
+    )
+
+    add_test(NAME DishCliClientTests COMMAND DishCliClientTests)
 endif()
