@@ -10,6 +10,14 @@ qt_add_executable(Dominator
     main.cpp
     mainwindow.cpp
     mainwindow.h
+    dishdirectionindicator.cpp
+    dishdirectionindicator.h
+    elevationindicator.cpp
+    elevationindicator.h
+    dishsettings.cpp
+    dishsettings.h
+    dishsettingsdialog.cpp
+    dishsettingsdialog.h
     localipcserver.cpp
     localipcserver.h
     positionreporter.cpp
@@ -24,6 +32,10 @@ target_link_libraries(Dominator
         Qt::Network
         Qt::Widgets
 )
+
+if(WIN32)
+    target_link_libraries(Dominator PRIVATE Crypt32)
+endif()
 
 install(TARGETS Dominator
     BUNDLE  DESTINATION .
@@ -62,5 +74,56 @@ if(BUILD_TESTING)
             Qt::Test
     )
 
+    if(WIN32)
+        target_link_libraries(DominatorTests PRIVATE Crypt32)
+    endif()
+
     add_test(NAME DominatorTests COMMAND DominatorTests)
+
+    qt_add_executable(DishSettingsTests
+        tests/dishsettings_test.cpp
+        dishsettings.cpp
+        dishsettings.h
+    )
+
+    target_include_directories(DishSettingsTests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    target_link_libraries(DishSettingsTests
+        PRIVATE
+            Qt::Core
+            Qt::Test
+    )
+
+    if(WIN32)
+        target_link_libraries(DishSettingsTests PRIVATE Crypt32)
+    endif()
+
+    add_test(NAME DishSettingsTests COMMAND DishSettingsTests)
+
+    qt_add_executable(DishDirectionIndicatorTests
+        tests/dishdirectionindicator_test.cpp
+        dishdirectionindicator.cpp
+        dishdirectionindicator.h
+        elevationindicator.cpp
+        elevationindicator.h
+    )
+
+    target_include_directories(DishDirectionIndicatorTests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    target_link_libraries(DishDirectionIndicatorTests
+        PRIVATE
+            Qt::Widgets
+            Qt::Test
+    )
+
+    add_test(NAME DishDirectionIndicatorTests COMMAND DishDirectionIndicatorTests)
+    set_tests_properties(DishDirectionIndicatorTests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 endif()

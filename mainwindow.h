@@ -4,6 +4,9 @@
 #include <QMainWindow>
 
 class QLabel;
+class DishSettings;
+class DishDirectionIndicator;
+class ElevationIndicator;
 class LocalIpcServer;
 class PositionReporter;
 class ScanController;
@@ -23,6 +26,9 @@ private:
     LocalIpcServer *ipcServer_ = nullptr;
     PositionReporter *positionReporter_ = nullptr;
     ScanController *scanController_ = nullptr;
+    DishSettings *dishSettings_ = nullptr;
+    DishDirectionIndicator *directionIndicator_ = nullptr;
+    ElevationIndicator *elevationIndicator_ = nullptr;
     QLabel *ipcStatusLabel_ = nullptr;
     QLabel *scanStateLabel_ = nullptr;
     QLabel *azimuthLabel_ = nullptr;

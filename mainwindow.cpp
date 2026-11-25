@@ -1,15 +1,22 @@
 #include "mainwindow.h"
 
+#include "dishdirectionindicator.h"
+#include "dishsettings.h"
+#include "dishsettingsdialog.h"
+#include "elevationindicator.h"
 #include "localipcserver.h"
 #include "positionreporter.h"
 #include "scancontroller.h"
 
+#include <QAction>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
 #include <QPushButton>
 #include <QStatusBar>
 #include <QVBoxLayout>
@@ -21,9 +28,17 @@ MainWindow::MainWindow(QWidget *parent)
     ipcServer_ = new LocalIpcServer(QStringLiteral("Dominator-Hauken-v1"), this);
     positionReporter_ = new PositionReporter(ipcServer_, this);
     scanController_ = new ScanController(this);
+    dishSettings_ = new DishSettings(this);
 
     setWindowTitle(tr("Dominator - Satellite Dish Control"));
-    resize(620, 480);
+    resize(760, 650);
+
+    auto *settingsMenu = menuBar()->addMenu(tr("&Settings"));
+    auto *dishSettingsAction = settingsMenu->addAction(tr("Dish connection…"));
+    connect(dishSettingsAction, &QAction::triggered, this, [this] {
+        DishSettingsDialog dialog(dishSettings_, this);
+        dialog.exec();
+    });
 
     auto *centralWidget = new QWidget(this);
     auto *mainLayout = new QVBoxLayout(centralWidget);
@@ -77,17 +92,32 @@ MainWindow::MainWindow(QWidget *parent)
     mainLayout->addWidget(scanGroup);
 
     auto *statusGroup = new QGroupBox(tr("Dish status"), centralWidget);
-    auto *statusLayout = new QFormLayout(statusGroup);
-    scanStateLabel_ = new QLabel(tr("Stopped"), statusGroup);
-    ipcStatusLabel_ = new QLabel(statusGroup);
-    azimuthLabel_ = new QLabel(tr("— °"), statusGroup);
-    elevationLabel_ = new QLabel(tr("— °"), statusGroup);
-    signalLevelLabel_ = new QLabel(tr("—"), statusGroup);
-    statusLayout->addRow(tr("Scan state:"), scanStateLabel_);
-    statusLayout->addRow(tr("Hauken IPC:"), ipcStatusLabel_);
-    statusLayout->addRow(tr("Current azimuth:"), azimuthLabel_);
-    statusLayout->addRow(tr("Current elevation:"), elevationLabel_);
-    statusLayout->addRow(tr("Signal level:"), signalLevelLabel_);
+    auto *statusLayout = new QHBoxLayout(statusGroup);
+    auto *directionGroup = new QGroupBox(tr("Azimuth — true north"), statusGroup);
+    auto *directionLayout = new QVBoxLayout(directionGroup);
+    directionIndicator_ = new DishDirectionIndicator(directionGroup);
+    directionLayout->addWidget(directionIndicator_);
+    statusLayout->addWidget(directionGroup, 1);
+
+    auto *elevationGroup = new QGroupBox(tr("Elevation — side view"), statusGroup);
+    auto *elevationLayout = new QVBoxLayout(elevationGroup);
+    elevationIndicator_ = new ElevationIndicator(elevationGroup);
+    elevationLayout->addWidget(elevationIndicator_);
+    statusLayout->addWidget(elevationGroup, 1);
+
+    auto *readoutsGroup = new QGroupBox(tr("Readouts"), statusGroup);
+    auto *readoutsLayout = new QFormLayout(readoutsGroup);
+    scanStateLabel_ = new QLabel(tr("Stopped"), readoutsGroup);
+    ipcStatusLabel_ = new QLabel(readoutsGroup);
+    azimuthLabel_ = new QLabel(tr("— °"), readoutsGroup);
+    elevationLabel_ = new QLabel(tr("— °"), readoutsGroup);
+    signalLevelLabel_ = new QLabel(tr("—"), readoutsGroup);
+    readoutsLayout->addRow(tr("Scan state:"), scanStateLabel_);
+    readoutsLayout->addRow(tr("Hauken IPC:"), ipcStatusLabel_);
+    readoutsLayout->addRow(tr("Current azimuth:"), azimuthLabel_);
+    readoutsLayout->addRow(tr("Current elevation:"), elevationLabel_);
+    readoutsLayout->addRow(tr("Signal level:"), signalLevelLabel_);
+    statusLayout->addWidget(readoutsGroup);
     mainLayout->addWidget(statusGroup);
     mainLayout->addStretch();
 
@@ -133,6 +163,8 @@ MainWindow::MainWindow(QWidget *parent)
             [this](double azimuthDegrees, double elevationDegrees) {
         azimuthLabel_->setText(QString::number(azimuthDegrees, 'f', 1) + tr(" °"));
         elevationLabel_->setText(QString::number(elevationDegrees, 'f', 1) + tr(" °"));
+        directionIndicator_->setAzimuthDegrees(azimuthDegrees);
+        elevationIndicator_->setElevationDegrees(elevationDegrees);
     });
     connect(positionReporter_, &PositionReporter::positionRejected,
             this, [this](const QString &reason) {
