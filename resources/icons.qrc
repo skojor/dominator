@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>dominator.svg</file>
+    </qresource>
+</RCC>

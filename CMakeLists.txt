@@ -1,13 +1,14 @@
 cmake_minimum_required(VERSION 3.19)
 project(Dominator LANGUAGES CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Network Widgets)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Network Svg Widgets)
 
 qt_standard_project_setup()
 
 qt_add_executable(Dominator
     WIN32 MACOSX_BUNDLE
     main.cpp
+    resources/icons.qrc
     mainwindow.cpp
     mainwindow.h
     dishdirectionindicator.cpp
@@ -30,10 +31,12 @@ target_link_libraries(Dominator
     PRIVATE
         Qt::Core
         Qt::Network
+        Qt::Svg
         Qt::Widgets
 )
 
 if(WIN32)
+    target_sources(Dominator PRIVATE resources/dominator.rc)
     target_link_libraries(Dominator PRIVATE Crypt32)
 endif()
 
