@@ -32,6 +32,8 @@ Run tests only after a successful build, and match the build and test configurat
 
 ## Hardware references and future work
 
+- The DataStream session and buffered backend in [datastream.h](./datastream.h) are simulator-only and built by `DataStreamTests`; they are not wired into the live CLI or UI. Simulator abort and completion semantics are not firmware guarantees. See IMA CLI Rev S pp. 21 and 61: the timestamp formats listed there differ, and `end` and `clear` are not documented physical stops.
+
 - Consult the [IMA CLI specification](./doc/135163_s-document-ima-cli-protocol-specification.pdf) for command behavior and the [6012-45 installation manual](./doc/99-161588-b-installation-manual-sea-tel-6012-45-eccn-ear99.pdf) for setup and operating limits. Confirm firmware-specific behavior on the intended controller before relying on it. Use simulated peers in automated tests; do not send commands to a live dish without explicit approval.
 - The manuals do not document a custom rectangular raster command. A leg-by-leg scan using `PATH` is a candidate, not an implemented feature. Verify coordinates, leg completion, and stop/pause behavior before enabling motion.
 - **Tools → Satellite pointing preview** uses the [N2YO positions API](https://www.n2yo.com/api/#positions). Starting the preview remembers the NORAD ID, latitude, longitude, and altitude and sends the observer coordinates to N2YO. Windows DPAPI encrypts the saved API key for the current Windows user; on other platforms the key is not saved. Predictions are time-limited, display-only, and never sent to the dish or Hauken. Test response handling with `N2yoClientTests` and synthetic data rather than a live key.

@@ -63,6 +63,11 @@ install(SCRIPT ${deploy_script})
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    qt_add_executable(DataStreamTests tests/datastream_test.cpp datastream.cpp datastream.h)
+    target_compile_features(DataStreamTests PRIVATE cxx_std_17)
+    target_include_directories(DataStreamTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(DataStreamTests PRIVATE Qt::Test)
+    add_test(NAME DataStreamTests COMMAND DataStreamTests)
 
     qt_add_executable(DominatorTests
         tests/ipc_test.cpp
