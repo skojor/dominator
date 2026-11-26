@@ -7,6 +7,7 @@
 #include "elevationindicator.h"
 #include "localipcserver.h"
 #include "positionreporter.h"
+#include "satellitepreviewdialog.h"
 #include "scancontroller.h"
 
 #include <QAction>
@@ -41,6 +42,15 @@ MainWindow::MainWindow(QWidget *parent)
     connect(dishSettingsAction, &QAction::triggered, this, [this] {
         DishSettingsDialog dialog(dishSettings_, this);
         dialog.exec();
+    });
+
+    auto *toolsMenu = menuBar()->addMenu(tr("&Tools"));
+    auto *previewAction = toolsMenu->addAction(tr("Satellite pointing preview…"));
+    auto *previewDialog = new SatellitePreviewDialog(dishSettings_, this);
+    connect(previewAction, &QAction::triggered, previewDialog, [previewDialog] {
+        previewDialog->show();
+        previewDialog->raise();
+        previewDialog->activateWindow();
     });
 
     auto *centralWidget = new QWidget(this);
@@ -223,6 +233,20 @@ MainWindow::MainWindow(QWidget *parent)
         Q_UNUSED(state);
         scanStateLabel_->setText(scanController_->stateName());
         ipcServer_->sendScanState(scanController_->stateName());
+    });
+    connect(dishCliClient_, &DishCliClient::positionReceived,
+            this, &MainWindow::updateDishPosition);
+    connect(dishCliClient_, &DishCliClient::positionUnavailable,
+            positionReporter_, &PositionReporter::clearPosition);
+    connect(positionReporter_, &PositionReporter::positionUpdated,
+            previewDialog, &SatellitePreviewDialog::setActualPosition);
+    connect(positionReporter_, &PositionReporter::positionCleared,
+            previewDialog, &SatellitePreviewDialog::clearActualPosition);
+    connect(positionReporter_, &PositionReporter::positionCleared, this, [this] {
+        azimuthLabel_->setText(tr("— °"));
+        elevationLabel_->setText(tr("— °"));
+        directionIndicator_->clearAzimuth();
+        elevationIndicator_->clearElevation();
     });
     connect(positionReporter_, &PositionReporter::positionUpdated, this,
             [this](double azimuthDegrees, double elevationDegrees) {

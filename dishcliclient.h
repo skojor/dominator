@@ -35,6 +35,8 @@ public:
 signals:
     void stateChanged(DishCliClient::State state, const QString &description);
     void errorOccurred(const QString &error);
+    void positionReceived(double azimuthDegrees, double elevationDegrees);
+    void positionUnavailable();
 
 private:
     enum class TelnetParseState {
@@ -45,9 +47,14 @@ private:
         SubnegotiationIac
     };
 
+    enum class PositionQuery { None, Azimuth, Elevation };
+
     void readAvailableData();
     QByteArray decodeTelnet(const QByteArray &input);
     void processLoginBuffer();
+    void pollPosition();
+    void sendPositionQuery(PositionQuery query);
+    void processPositionResponse();
     bool sendLine(const QByteArray &line);
     void sendTelnetResponse(unsigned char response, unsigned char option);
     bool hasCommandPrompt() const;
@@ -57,7 +64,11 @@ private:
 
     QTcpSocket socket_;
     QTimer *timeoutTimer_;
+    QTimer *positionTimer_;
     State state_ = State::Disconnected;
+    PositionQuery positionQuery_ = PositionQuery::None;
+    double pendingAzimuth_ = 0.0;
+    bool positionErrorReported_ = false;
     TelnetParseState telnetParseState_ = TelnetParseState::Data;
     unsigned char telnetOptionCommand_ = 0;
     QByteArray readBuffer_;

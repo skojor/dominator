@@ -11,6 +11,7 @@ public:
     explicit ElevationIndicator(QWidget *parent = nullptr);
 
     bool setElevationDegrees(double elevationDegrees);
+    void clearElevation();
     bool hasElevation() const;
     double elevationDegrees() const;
 

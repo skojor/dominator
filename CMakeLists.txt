@@ -26,6 +26,10 @@ qt_add_executable(Dominator
     localipcserver.h
     positionreporter.cpp
     positionreporter.h
+    n2yoclient.cpp
+    n2yoclient.h
+    satellitepreviewdialog.cpp
+    satellitepreviewdialog.h
     scancontroller.cpp
     scancontroller.h
 )
@@ -152,4 +156,9 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME DishCliClientTests COMMAND DishCliClientTests)
+
+    qt_add_executable(N2yoClientTests tests/n2yoclient_test.cpp n2yoclient.cpp n2yoclient.h)
+    target_include_directories(N2yoClientTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(N2yoClientTests PRIVATE Qt::Network Qt::Test)
+    add_test(NAME N2yoClientTests COMMAND N2yoClientTests)
 endif()

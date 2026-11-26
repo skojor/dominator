@@ -45,6 +45,12 @@ bool DishDirectionIndicator::setAzimuthDegrees(double azimuthDegrees)
     return true;
 }
 
+void DishDirectionIndicator::clearAzimuth()
+{
+    hasAzimuth_ = false;
+    update();
+}
+
 bool DishDirectionIndicator::hasAzimuth() const
 {
     return hasAzimuth_;

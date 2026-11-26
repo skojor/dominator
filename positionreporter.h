@@ -17,9 +17,11 @@ public:
 
 public slots:
     void updatePosition(double azimuthDegrees, double elevationDegrees);
+    void clearPosition();
 
 signals:
     void positionUpdated(double azimuthDegrees, double elevationDegrees);
+    void positionCleared();
     void positionRejected(const QString &reason);
 
 private slots:

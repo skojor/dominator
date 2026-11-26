@@ -50,8 +50,10 @@ the time the position was last updated:
 {"type":"position","azimuth_deg":180.0,"elevation_deg":25.0,"reference":"true_north","timestamp":"2026-11-23T20:10:00.000Z"}
 ```
 
-The current project does not yet have a dish protocol implementation, so it
-does not produce positions or physically move the dish. `ScanController`
-exposes start, stop, and pause signals for that future hardware adapter.
+The dish CLI supplies read-only world-frame telemetry; the reply format
+and true-north reference still need live verification. Dominator stops sending
+positions when dish telemetry becomes unavailable. It does not physically
+move the dish. `ScanController` exposes start, stop, and pause signals for a
+future motion adapter.
 Command acceptance currently reflects the Dominator scan state, not a
 hardware acknowledgement.

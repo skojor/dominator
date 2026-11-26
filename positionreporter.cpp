@@ -32,6 +32,15 @@ void PositionReporter::updatePosition(double azimuthDegrees, double elevationDeg
     emit positionUpdated(azimuthDegrees_, elevationDegrees_);
 }
 
+void PositionReporter::clearPosition()
+{
+    if (!hasPosition_)
+        return;
+
+    hasPosition_ = false;
+    emit positionCleared();
+}
+
 void PositionReporter::reportPosition()
 {
     if (!hasPosition_)

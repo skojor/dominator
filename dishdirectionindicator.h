@@ -11,6 +11,7 @@ public:
     explicit DishDirectionIndicator(QWidget *parent = nullptr);
 
     bool setAzimuthDegrees(double azimuthDegrees);
+    void clearAzimuth();
     bool hasAzimuth() const;
     double azimuthDegrees() const;
 

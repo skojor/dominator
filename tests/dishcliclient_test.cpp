@@ -9,16 +9,19 @@ class DishCliClientTest : public QObject
     Q_OBJECT
 
 private slots:
-    void logsInToPromptedCliOverTelnetTcp();
+    void logsInAndPollsWorldFramePosition();
     void rejectsBlankHostAndUsername();
 };
 
-void DishCliClientTest::logsInToPromptedCliOverTelnetTcp()
+void DishCliClientTest::logsInAndPollsWorldFramePosition()
 {
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost, 0));
 
     DishCliClient client;
+    QSignalSpy positionSpy(&client, &DishCliClient::positionReceived);
+    QSignalSpy unavailableSpy(&client, &DishCliClient::positionUnavailable);
+    QSignalSpy errorSpy(&client, &DishCliClient::errorOccurred);
     client.connectToDish(QStringLiteral("127.0.0.1"), server.serverPort(),
                          QStringLiteral("operator"), QStringLiteral("test-password"));
     QTRY_VERIFY(server.hasPendingConnections());
@@ -56,6 +59,37 @@ void DishCliClientTest::logsInToPromptedCliOverTelnetTcp()
     peer->flush();
     QTRY_COMPARE(client.state(), DishCliClient::State::Ready);
     QCOMPARE(client.stateText(), QStringLiteral("Connected"));
+
+    const QByteArray azimuthQuery = "show status antenna earth_az\r";
+    const QByteArray elevationQuery = "show status antenna earth_el\r";
+    QTRY_VERIFY(received.endsWith(azimuthQuery));
+    received.clear();
+    peer->write("show status antenna earth_az\r\nEARTH_AZ: -0.");
+    peer->flush();
+    QTest::qWait(50);
+    QVERIFY(received.isEmpty());
+    peer->write("5\r\n> ");
+    peer->flush();
+    QTRY_COMPARE(received, elevationQuery);
+    QCOMPARE(positionSpy.count(), 0);
+
+    received.clear();
+    peer->write("25.25\r\n>");
+    peer->flush();
+    QTRY_COMPARE(positionSpy.count(), 1);
+    QCOMPARE(positionSpy.first().at(0).toDouble(), 359.5);
+    QCOMPARE(positionSpy.first().at(1).toDouble(), 25.25);
+
+    QTRY_COMPARE(received, azimuthQuery);
+    received.clear();
+    peer->write("180\r\n>");
+    peer->flush();
+    QTRY_COMPARE(received, elevationQuery);
+    peer->write("ERROR: invalid command 123\r\n>");
+    peer->flush();
+    QTRY_COMPARE(unavailableSpy.count(), 1);
+    QCOMPARE(positionSpy.count(), 1);
+    QCOMPARE(errorSpy.count(), 1);
 
     client.disconnectFromDish();
     QCOMPARE(client.state(), DishCliClient::State::Disconnected);

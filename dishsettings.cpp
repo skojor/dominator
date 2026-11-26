@@ -17,12 +17,18 @@ const QString ElevationMaximumKey = QStringLiteral("scan/elevationMaximum");
 const QString TcpPortKey = QStringLiteral("dish/tcpPort");
 const QString UsernameKey = QStringLiteral("dish/username");
 const QString PasswordKey = QStringLiteral("dish/passwordProtected");
+const QString CatalogIdKey = QStringLiteral("satellitePreview/catalogId");
+const QString LatitudeKey = QStringLiteral("satellitePreview/latitude");
+const QString LongitudeKey = QStringLiteral("satellitePreview/longitude");
+const QString AltitudeKey = QStringLiteral("satellitePreview/altitude");
+const QString ApiKeyStorageKey = QStringLiteral("satellitePreview/apiKeyProtected");
 
-bool protectPassword(const QString &password, QByteArray &protectedPassword, QString &error)
+bool protectCredential(const QString &credential, const wchar_t *description,
+                       QByteArray &protectedCredential, QString &error)
 {
-    const QByteArray plainText = password.toUtf8();
+    const QByteArray plainText = credential.toUtf8();
     if (plainText.isEmpty()) {
-        protectedPassword.clear();
+        protectedCredential.clear();
         return true;
     }
 
@@ -32,35 +38,35 @@ bool protectPassword(const QString &password, QByteArray &protectedPassword, QSt
     input.cbData = static_cast<DWORD>(plainText.size());
 
     DATA_BLOB output{};
-    if (!CryptProtectData(&input, L"Dominator dish CLI password", nullptr, nullptr, nullptr,
+    if (!CryptProtectData(&input, description, nullptr, nullptr, nullptr,
                           CRYPTPROTECT_UI_FORBIDDEN, &output)) {
-        error = QObject::tr("Windows could not encrypt the password (error %1).")
+        error = QObject::tr("Windows could not encrypt the credential (error %1).")
                     .arg(GetLastError());
         return false;
     }
 
-    protectedPassword = QByteArray(reinterpret_cast<const char *>(output.pbData),
-                                   static_cast<qsizetype>(output.cbData)).toBase64();
+    protectedCredential = QByteArray(reinterpret_cast<const char *>(output.pbData),
+                                     static_cast<qsizetype>(output.cbData)).toBase64();
     LocalFree(output.pbData);
     return true;
 #else
-    Q_UNUSED(protectedPassword);
-    error = QObject::tr("Secure password storage is only available on Windows.");
+    Q_UNUSED(description);
+    error = QObject::tr("Secure credential storage is only available on Windows.");
     return false;
 #endif
 }
 
-bool unprotectPassword(const QByteArray &protectedPassword, QString &password, QString &error)
+bool unprotectCredential(const QByteArray &protectedCredential, QString &credential, QString &error)
 {
-    if (protectedPassword.isEmpty()) {
-        password.clear();
+    credential.clear();
+    if (protectedCredential.isEmpty()) {
         return true;
     }
 
 #ifdef Q_OS_WIN
-    const QByteArray encrypted = QByteArray::fromBase64(protectedPassword);
+    const QByteArray encrypted = QByteArray::fromBase64(protectedCredential);
     if (encrypted.isEmpty()) {
-        error = QObject::tr("The saved password is invalid.");
+        error = QObject::tr("The saved credential is invalid.");
         return false;
     }
 
@@ -71,19 +77,18 @@ bool unprotectPassword(const QByteArray &protectedPassword, QString &password, Q
     DATA_BLOB output{};
     if (!CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr,
                             CRYPTPROTECT_UI_FORBIDDEN, &output)) {
-        error = QObject::tr("Windows could not decrypt the saved password (error %1).")
+        error = QObject::tr("Windows could not decrypt the saved credential (error %1).")
                     .arg(GetLastError());
         return false;
     }
 
-    password = QString::fromUtf8(reinterpret_cast<const char *>(output.pbData),
-                                 static_cast<qsizetype>(output.cbData));
+    credential = QString::fromUtf8(reinterpret_cast<const char *>(output.pbData),
+                                   static_cast<qsizetype>(output.cbData));
     SecureZeroMemory(output.pbData, output.cbData);
     LocalFree(output.pbData);
     return true;
 #else
-    Q_UNUSED(password);
-    error = QObject::tr("Secure password storage is only available on Windows.");
+    error = QObject::tr("Secure credential storage is only available on Windows.");
     return false;
 #endif
 }
@@ -138,7 +143,42 @@ QString DishSettings::username() const
 
 bool DishSettings::loadPassword(QString &password, QString &error) const
 {
-    return unprotectPassword(settings_->value(PasswordKey).toByteArray(), password, error);
+    return unprotectCredential(settings_->value(PasswordKey).toByteArray(), password, error);
+}
+
+SatellitePreviewSettings DishSettings::satellitePreview() const
+{
+    return {settings_->value(CatalogIdKey).toString(),
+            settings_->value(LatitudeKey, 0.0).toDouble(),
+            settings_->value(LongitudeKey, 0.0).toDouble(),
+            settings_->value(AltitudeKey, 0.0).toDouble()};
+}
+
+bool DishSettings::loadN2yoApiKey(QString &apiKey, QString &error) const
+{
+    return unprotectCredential(settings_->value(ApiKeyStorageKey).toByteArray(), apiKey, error);
+}
+
+bool DishSettings::saveSatellitePreview(const SatellitePreviewSettings &preview,
+                                        const QString &apiKey, QString &error)
+{
+    QByteArray protectedKey;
+    if (!protectCredential(apiKey, L"Dominator N2YO API key", protectedKey, error))
+        return false;
+
+    settings_->setValue(CatalogIdKey, preview.catalogId);
+    settings_->setValue(LatitudeKey, preview.latitude);
+    settings_->setValue(LongitudeKey, preview.longitude);
+    settings_->setValue(AltitudeKey, preview.altitude);
+    if (!protectedKey.isEmpty())
+        settings_->setValue(ApiKeyStorageKey, protectedKey);
+    settings_->sync();
+    if (settings_->status() != QSettings::NoError) {
+        error = tr("Could not save the preview settings.");
+        return false;
+    }
+
+    return true;
 }
 
 bool DishSettings::saveFrontPageSettings(const QString &dishHost,
@@ -175,7 +215,7 @@ bool DishSettings::save(int tcpPort,
     }
 
     QByteArray protectedPassword;
-    if (!protectPassword(password, protectedPassword, error))
+    if (!protectCredential(password, L"Dominator dish CLI password", protectedPassword, error))
         return false;
 
     settings_->setValue(TcpPortKey, tcpPort);

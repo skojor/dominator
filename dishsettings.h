@@ -6,6 +6,14 @@
 
 class QSettings;
 
+struct SatellitePreviewSettings
+{
+    QString catalogId;
+    double latitude = 0.0;
+    double longitude = 0.0;
+    double altitude = 0.0;
+};
+
 class DishSettings : public QObject
 {
 public:
@@ -20,6 +28,10 @@ public:
     int tcpPort() const;
     QString username() const;
     bool loadPassword(QString &password, QString &error) const;
+    SatellitePreviewSettings satellitePreview() const;
+    bool loadN2yoApiKey(QString &apiKey, QString &error) const;
+    bool saveSatellitePreview(const SatellitePreviewSettings &preview,
+                              const QString &apiKey, QString &error);
     bool saveFrontPageSettings(const QString &dishHost,
                                double azimuthStart,
                                double azimuthEnd,

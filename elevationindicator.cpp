@@ -41,6 +41,12 @@ bool ElevationIndicator::setElevationDegrees(double elevationDegrees)
     return true;
 }
 
+void ElevationIndicator::clearElevation()
+{
+    hasElevation_ = false;
+    update();
+}
+
 bool ElevationIndicator::hasElevation() const
 {
     return hasElevation_;

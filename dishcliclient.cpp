@@ -1,10 +1,16 @@
 #include "dishcliclient.h"
 
+#include <QRegularExpression>
 #include <QTimer>
+
+#include <cmath>
+#include <optional>
 
 namespace {
 constexpr int LoginTimeoutMs = 15000;
-constexpr qsizetype MaxLoginBufferSize = 64 * 1024;
+constexpr int PositionPollIntervalMs = 1000;
+constexpr int PositionResponseTimeoutMs = 3000;
+constexpr qsizetype MaxResponseBufferSize = 64 * 1024;
 constexpr unsigned char TelnetIac = 255;
 constexpr unsigned char TelnetDo = 253;
 constexpr unsigned char TelnetDont = 254;
@@ -12,21 +18,58 @@ constexpr unsigned char TelnetWill = 251;
 constexpr unsigned char TelnetWont = 252;
 constexpr unsigned char TelnetSubnegotiation = 250;
 constexpr unsigned char TelnetSubnegotiationEnd = 240;
+
+const QByteArray AzimuthCommand = "show status antenna earth_az";
+const QByteArray ElevationCommand = "show status antenna earth_el";
+
+std::optional<double> parseAngle(QByteArray response, const QByteArray &command)
+{
+    response.replace('\0', "");
+    response.replace('\r', '\n');
+    static const QRegularExpression anglePattern(
+        QStringLiteral(R"(^(?:(?:status\s+antenna\s+)?(earth_(?:az|el))\s*[:=]\s*)?([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:\s*(?:deg|°))?$)"),
+        QRegularExpression::CaseInsensitiveOption);
+    std::optional<double> angle;
+    for (QByteArray line : response.split('\n')) {
+        line = line.trimmed();
+        if (line.startsWith('>'))
+            line = line.mid(1).trimmed();
+        if (line.isEmpty() || line.compare(command, Qt::CaseInsensitive) == 0)
+            continue;
+
+        const auto match = anglePattern.match(QString::fromUtf8(line));
+        if (!match.hasMatch() || angle
+            || (match.hasCaptured(1) && !command.endsWith(match.captured(1).toLower().toLatin1()))) {
+            return std::nullopt;
+        }
+        bool ok = false;
+        const double value = match.captured(2).toDouble(&ok);
+        if (!ok || !std::isfinite(value))
+            return std::nullopt;
+        angle = value;
+    }
+    return angle;
+}
 }
 
 DishCliClient::DishCliClient(QObject *parent)
     : QObject(parent)
     , timeoutTimer_(new QTimer(this))
+    , positionTimer_(new QTimer(this))
 {
     timeoutTimer_->setSingleShot(true);
     timeoutTimer_->setInterval(LoginTimeoutMs);
     connect(timeoutTimer_, &QTimer::timeout, this, [this] {
-        fail(tr("Timed out while connecting or logging in to the dish."));
+        fail(state_ == State::Ready
+                 ? tr("Timed out waiting for a dish position response; disconnected.")
+                 : tr("Timed out while connecting or logging in to the dish."));
     });
+    positionTimer_->setInterval(PositionPollIntervalMs);
+    connect(positionTimer_, &QTimer::timeout, this, &DishCliClient::pollPosition);
 
     connect(&socket_, &QTcpSocket::connected, this, [this] {
         setState(State::AwaitingUsername);
-        timeoutTimer_->start();
+        timeoutTimer_->start(LoginTimeoutMs);
         readAvailableData();
     });
     connect(&socket_, &QTcpSocket::readyRead,
@@ -112,13 +155,20 @@ void DishCliClient::disconnectFromDish()
 void DishCliClient::readAvailableData()
 {
     const QByteArray decoded = decodeTelnet(socket_.readAll());
+    if (state_ == State::Disconnected
+        || (state_ == State::Ready && positionQuery_ == PositionQuery::None)) {
+        return;
+    }
     readBuffer_.append(decoded);
-    if (readBuffer_.size() > MaxLoginBufferSize) {
-        fail(tr("Dish sent too much data before completing login."));
+    if (readBuffer_.size() > MaxResponseBufferSize) {
+        fail(tr("Dish response exceeded the buffer limit."));
         return;
     }
 
-    processLoginBuffer();
+    if (state_ == State::Ready)
+        processPositionResponse();
+    else
+        processLoginBuffer();
 }
 
 QByteArray DishCliClient::decodeTelnet(const QByteArray &input)
@@ -185,7 +235,7 @@ void DishCliClient::processLoginBuffer()
                 if (!sendLine(username_))
                     return;
                 setState(State::AwaitingPassword);
-                timeoutTimer_->start();
+                timeoutTimer_->start(LoginTimeoutMs);
                 consumedPrompt = true;
             }
         } else if (state_ == State::AwaitingPassword) {
@@ -195,7 +245,7 @@ void DishCliClient::processLoginBuffer()
                 if (!sendLine(password_))
                     return;
                 setState(State::AwaitingCommandPrompt);
-                timeoutTimer_->start();
+                timeoutTimer_->start(LoginTimeoutMs);
                 consumedPrompt = true;
             }
         } else if (state_ == State::AwaitingCommandPrompt && hasCommandPrompt()) {
@@ -203,7 +253,54 @@ void DishCliClient::processLoginBuffer()
             timeoutTimer_->stop();
             clearCredentials();
             setState(State::Ready);
+            pollPosition();
         }
+    }
+}
+
+void DishCliClient::pollPosition()
+{
+    if (state_ == State::Ready && positionQuery_ == PositionQuery::None)
+        sendPositionQuery(PositionQuery::Azimuth);
+}
+
+void DishCliClient::sendPositionQuery(PositionQuery query)
+{
+    readBuffer_.clear();
+    positionQuery_ = query;
+    if (sendLine(query == PositionQuery::Azimuth ? AzimuthCommand : ElevationCommand))
+        timeoutTimer_->start(PositionResponseTimeoutMs);
+}
+
+void DishCliClient::processPositionResponse()
+{
+    if (!hasCommandPrompt())
+        return;
+
+    timeoutTimer_->stop();
+    const bool isAzimuth = positionQuery_ == PositionQuery::Azimuth;
+    const auto angle = parseAngle(readBuffer_.left(readBuffer_.lastIndexOf('>')),
+                                  isAzimuth ? AzimuthCommand : ElevationCommand);
+    readBuffer_.clear();
+    positionQuery_ = PositionQuery::None;
+
+    if (!angle || *angle < (isAzimuth ? -180.0 : -90.0)
+        || *angle > (isAzimuth ? 360.0 : 90.0)) {
+        emit positionUnavailable();
+        if (!positionErrorReported_) {
+            positionErrorReported_ = true;
+            emit errorOccurred(isAzimuth ? tr("Dish returned an invalid EARTH_AZ response.")
+                                         : tr("Dish returned an invalid EARTH_EL response."));
+        }
+        return;
+    }
+
+    if (isAzimuth) {
+        pendingAzimuth_ = std::fmod(*angle + 360.0, 360.0);
+        sendPositionQuery(PositionQuery::Elevation);
+    } else {
+        positionErrorReported_ = false;
+        emit positionReceived(pendingAzimuth_, *angle);
     }
 }
 
@@ -212,7 +309,7 @@ bool DishCliClient::sendLine(const QByteArray &line)
     QByteArray message = line;
     message.append('\r');
     if (socket_.write(message) != message.size()) {
-        fail(tr("Could not send login data to the dish: %1").arg(socket_.errorString()));
+        fail(tr("Could not send data to the dish: %1").arg(socket_.errorString()));
         return false;
     }
     return true;
@@ -267,6 +364,15 @@ void DishCliClient::setState(State state)
     if (state_ == state)
         return;
 
+    const bool wasReady = state_ == State::Ready;
     state_ = state;
+    if (state_ == State::Ready) {
+        positionErrorReported_ = false;
+        positionTimer_->start();
+    } else if (wasReady) {
+        positionTimer_->stop();
+        positionQuery_ = PositionQuery::None;
+        emit positionUnavailable();
+    }
     emit stateChanged(state_, stateText());
 }
