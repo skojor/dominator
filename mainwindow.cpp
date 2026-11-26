@@ -50,6 +50,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *connectionLayout = new QHBoxLayout(connectionGroup);
     auto *addressInput = new QLineEdit(connectionGroup);
     addressInput->setPlaceholderText(tr("Dish IP address"));
+    addressInput->setText(dishSettings_->dishHost());
     addressInput->setToolTip(
         tr("The dish CLI uses unencrypted Telnet. Connect only on a trusted network."));
     auto *connectButton = new QPushButton(tr("Connect"), connectionGroup);
@@ -72,20 +73,25 @@ MainWindow::MainWindow(QWidget *parent)
         input->setSuffix(tr("°"));
         input->setValue(value);
         scanLayout->addRow(label, input);
+        return input;
     };
 
-    addDegreeInput(tr("Azimuth start:"), 0.0);
-    addDegreeInput(tr("Azimuth end:"), 360.0);
+    auto *azimuthStartInput =
+        addDegreeInput(tr("Azimuth start:"), dishSettings_->azimuthStart());
+    auto *azimuthEndInput =
+        addDegreeInput(tr("Azimuth end:"), dishSettings_->azimuthEnd());
 
     auto *speedInput = new QDoubleSpinBox(scanGroup);
     speedInput->setRange(0.1, 360.0);
     speedInput->setDecimals(1);
     speedInput->setSuffix(tr("°/min"));
-    speedInput->setValue(1.0);
+    speedInput->setValue(dishSettings_->scanSpeed());
     scanLayout->addRow(tr("Scan speed:"), speedInput);
 
-    addDegreeInput(tr("Elevation minimum:"), 0.0);
-    addDegreeInput(tr("Elevation maximum:"), 90.0);
+    auto *elevationMinimumInput =
+        addDegreeInput(tr("Elevation minimum:"), dishSettings_->elevationMinimum());
+    auto *elevationMaximumInput =
+        addDegreeInput(tr("Elevation maximum:"), dishSettings_->elevationMaximum());
 
     auto *scanButtonsLayout = new QHBoxLayout;
     scanButtonsLayout->addStretch();
@@ -130,6 +136,31 @@ MainWindow::MainWindow(QWidget *parent)
 
     setCentralWidget(centralWidget);
     statusBar()->showMessage(tr("Not connected"));
+
+    const auto saveFrontPageSettings = [this, addressInput, azimuthStartInput,
+                                        azimuthEndInput, speedInput,
+                                        elevationMinimumInput, elevationMaximumInput] {
+        QString error;
+        if (!dishSettings_->saveFrontPageSettings(
+                addressInput->text(), azimuthStartInput->value(),
+                azimuthEndInput->value(), speedInput->value(),
+                elevationMinimumInput->value(), elevationMaximumInput->value(),
+                error)) {
+            statusBar()->showMessage(error, 10000);
+        }
+    };
+    connect(addressInput, &QLineEdit::textChanged,
+            this, saveFrontPageSettings);
+    connect(azimuthStartInput, qOverload<double>(&QDoubleSpinBox::valueChanged),
+            this, saveFrontPageSettings);
+    connect(azimuthEndInput, qOverload<double>(&QDoubleSpinBox::valueChanged),
+            this, saveFrontPageSettings);
+    connect(speedInput, qOverload<double>(&QDoubleSpinBox::valueChanged),
+            this, saveFrontPageSettings);
+    connect(elevationMinimumInput, qOverload<double>(&QDoubleSpinBox::valueChanged),
+            this, saveFrontPageSettings);
+    connect(elevationMaximumInput, qOverload<double>(&QDoubleSpinBox::valueChanged),
+            this, saveFrontPageSettings);
 
     connect(startScanButton, &QPushButton::clicked,
             scanController_, &ScanController::startScan);

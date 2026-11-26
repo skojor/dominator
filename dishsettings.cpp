@@ -8,6 +8,12 @@
 #endif
 
 namespace {
+const QString DishHostKey = QStringLiteral("dish/host");
+const QString AzimuthStartKey = QStringLiteral("scan/azimuthStart");
+const QString AzimuthEndKey = QStringLiteral("scan/azimuthEnd");
+const QString ScanSpeedKey = QStringLiteral("scan/speed");
+const QString ElevationMinimumKey = QStringLiteral("scan/elevationMinimum");
+const QString ElevationMaximumKey = QStringLiteral("scan/elevationMaximum");
 const QString TcpPortKey = QStringLiteral("dish/tcpPort");
 const QString UsernameKey = QStringLiteral("dish/username");
 const QString PasswordKey = QStringLiteral("dish/passwordProtected");
@@ -89,6 +95,36 @@ DishSettings::DishSettings(QObject *parent)
 {
 }
 
+QString DishSettings::dishHost() const
+{
+    return settings_->value(DishHostKey).toString();
+}
+
+double DishSettings::azimuthStart() const
+{
+    return settings_->value(AzimuthStartKey, 0.0).toDouble();
+}
+
+double DishSettings::azimuthEnd() const
+{
+    return settings_->value(AzimuthEndKey, 360.0).toDouble();
+}
+
+double DishSettings::scanSpeed() const
+{
+    return settings_->value(ScanSpeedKey, 1.0).toDouble();
+}
+
+double DishSettings::elevationMinimum() const
+{
+    return settings_->value(ElevationMinimumKey, 0.0).toDouble();
+}
+
+double DishSettings::elevationMaximum() const
+{
+    return settings_->value(ElevationMaximumKey, 90.0).toDouble();
+}
+
 int DishSettings::tcpPort() const
 {
     const int port = settings_->value(TcpPortKey, 2003).toInt();
@@ -103,6 +139,29 @@ QString DishSettings::username() const
 bool DishSettings::loadPassword(QString &password, QString &error) const
 {
     return unprotectPassword(settings_->value(PasswordKey).toByteArray(), password, error);
+}
+
+bool DishSettings::saveFrontPageSettings(const QString &dishHost,
+                                         double azimuthStart,
+                                         double azimuthEnd,
+                                         double scanSpeed,
+                                         double elevationMinimum,
+                                         double elevationMaximum,
+                                         QString &error)
+{
+    settings_->setValue(DishHostKey, dishHost);
+    settings_->setValue(AzimuthStartKey, azimuthStart);
+    settings_->setValue(AzimuthEndKey, azimuthEnd);
+    settings_->setValue(ScanSpeedKey, scanSpeed);
+    settings_->setValue(ElevationMinimumKey, elevationMinimum);
+    settings_->setValue(ElevationMaximumKey, elevationMaximum);
+    settings_->sync();
+    if (settings_->status() != QSettings::NoError) {
+        error = tr("Could not save front-page settings.");
+        return false;
+    }
+
+    return true;
 }
 
 bool DishSettings::save(int tcpPort,

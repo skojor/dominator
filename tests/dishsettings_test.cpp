@@ -12,6 +12,8 @@ class DishSettingsTest : public QObject
 private slots:
     void initTestCase();
     void defaultsToPort2003();
+    void defaultsFrontPageSettings();
+    void savesFrontPageSettings();
     void savesConnectionSettings();
 };
 
@@ -31,6 +33,45 @@ void DishSettingsTest::defaultsToPort2003()
 
     DishSettings settings;
     QCOMPARE(settings.tcpPort(), 2003);
+}
+
+void DishSettingsTest::defaultsFrontPageSettings()
+{
+    QTemporaryDir settingsDirectory;
+    QVERIFY(settingsDirectory.isValid());
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       settingsDirectory.path());
+
+    DishSettings settings;
+    QCOMPARE(settings.dishHost(), QString());
+    QCOMPARE(settings.azimuthStart(), 0.0);
+    QCOMPARE(settings.azimuthEnd(), 360.0);
+    QCOMPARE(settings.scanSpeed(), 1.0);
+    QCOMPARE(settings.elevationMinimum(), 0.0);
+    QCOMPARE(settings.elevationMaximum(), 90.0);
+}
+
+void DishSettingsTest::savesFrontPageSettings()
+{
+    QTemporaryDir settingsDirectory;
+    QVERIFY(settingsDirectory.isValid());
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       settingsDirectory.path());
+
+    DishSettings settings;
+    QString error;
+    QVERIFY2(settings.saveFrontPageSettings(QStringLiteral("192.0.2.10"),
+                                             15.5, 245.0, 2.5, 10.0, 75.0,
+                                             error),
+             qPrintable(error));
+
+    DishSettings reloadedSettings;
+    QCOMPARE(reloadedSettings.dishHost(), QStringLiteral("192.0.2.10"));
+    QCOMPARE(reloadedSettings.azimuthStart(), 15.5);
+    QCOMPARE(reloadedSettings.azimuthEnd(), 245.0);
+    QCOMPARE(reloadedSettings.scanSpeed(), 2.5);
+    QCOMPARE(reloadedSettings.elevationMinimum(), 10.0);
+    QCOMPARE(reloadedSettings.elevationMaximum(), 75.0);
 }
 
 void DishSettingsTest::savesConnectionSettings()
